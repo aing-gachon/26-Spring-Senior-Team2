@@ -20,9 +20,11 @@ NIH 데이터셋의 다중 라벨(Multi-label) 특성을 강화학습 에이전�
 MONAI를 활용하여 원시 의료 이미지(Raw Data)를 에이전트가 관찰할 상태(State) 텐서로 변환합니다.
 - `LoadImaged`, `EnsureChannelFirstd`, 네트워크 입력 크기에 맞춘 `Resized` (224x224), `ScaleIntensityd`, 최종 `EnsureTyped` (PyTorch Tensor).
 
-### Phase 3: DRL Agent Architecture (CNN-based DDQN)
-의료 이미지의 공간적 특징(Spatial Features)을 추출하기 위해 Q-Network 앞단에 CNN 백본을 결합한 에이전트를 설계합니다.
-- **특징 추출기 (Feature Extractor)**: `torchvision.models.resnet50` 을 백본으로 채택하며, 기존 분류(FC) 레이어를 행동 공간(Action Space) 크기에 맞춘 **Q-Value 출력 레이어**로 교체했습니다.
+### Phase 3: DRL Agent Architecture (VNet-based DDQN)
+의료 이미지의 공간적 특징(Spatial Features)을 추출하기 위해 Q-Network 앞단에 의료영상 특화 CNN 백본을 결합한 에이전트를 설계합니다.
+- **특징 추출기 (Feature Extractor)**: 의료영상 최적화 모델인 **VNet(2D)**을 백본으로 채택했습니다. 
+  - 기존 ResNet50 대비 약 **1/19 수준의 파라미터(1.22M)**로 경량화되어 학습 속도가 빠르고 메모리 효율이 뛰어납니다.
+  - Residual Connections을 통해 깊은 계층에서도 안정적인 특징 추출이 가능합니다.
 
 ### Phase 4: Environment & Reward Mechanism
 가상 의료 환경 내에서 에이전트의 예측 분류($a_t$)와 실제 정답 라벨($b_t$)을 지속적으로 평가하는 적응형 보상(Reward)을 제공합니다.
@@ -55,7 +57,7 @@ BicDRL-Reproduction/
 │   ├── __init__.py
 │   ├── dataset.py              # 데이터 필터링 통계 분석 및 MONAI DataLoader 반환
 │   ├── transforms.py           # 영상 데이터 증강 및 MONAI 전처리 파이프라인
-│   ├── networks.py             # CNN 특징 추출기(ResNet50 등) 기반의 통합 네트워크 아키텍처
+│   ├── networks.py             # 의료영상 특화 VNet(2D) 기반의 통합 네트워크 아키텍처
 │   ├── agent.py                # DDQNAgent의 행동 선택 로직 및 파라미터 업데이트 
 │   ├── environment.py          # 의료 진단용 MDP 환경 설계 (적응형 보상 함수 반환기)
 │   ├── replay_buffer.py        # 이전 예측 기록을 보관 및 반환하는 Experience 재생 버퍼

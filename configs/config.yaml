@@ -1,4 +1,4 @@
-experiment_name: "BicDRL_ResNet50_Default"
+experiment_name: "BicDRL_VNet_Default"
 
 data:
   csv_path: "data/Data_Entry_2017.csv"
@@ -6,7 +6,7 @@ data:
   image_size: 224
 
 agent:
-  backbone: "resnet50"
+  backbone: "vnet"
   num_classes: 2      # Default: binary classification (Pneumothorax vs Normal)
   gamma_factor: 1.0   # Base factor for adaptive gamma_k
   epsilon_start: 1.0

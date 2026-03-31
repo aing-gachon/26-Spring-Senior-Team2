@@ -1,4 +1,4 @@
-# 🚀 BicDRL-Reproduction: Deep Reinforcement Learning for Imbalanced Medical Image Classification
+<img width="2816" height="1536" alt="Gemini_Generated_Image_td82lutd82lutd82" src="https://github.com/user-attachments/assets/2c18d33f-4197-4cf8-ba22-4e7993591d91" /># 🚀 BicDRL-Reproduction: Deep Reinforcement Learning for Imbalanced Medical Image Classification
 
 ## 📌 Project Overview
 
@@ -65,3 +65,6 @@ DDQN(Double Deep Q-Network) 알고리즘을 기반으로 에이전트를 학습�
 - **Prioritized Experience Replay (PER):** 튜플 $(s_t, a_t, r_t, s_{t+1})$ 을 버퍼에 저장하고, TD 에러가 큰(학습이 더 필요한) 샘플을 우선적으로 추출하여 학습합니다.
     
 - **네트워크 업데이트:** Adam 옵티마이저를 사용하여 `MainNet`을 업데이트하며, Q-value의 과대평가를 방지하기 위해 주기적으로 `TargetNet`에 가중치를 동기화합니다.
+<img width="2816" height="1536" alt="Gemini_Generated_Image_td82lutd82lutd82" src="https://github.com/user-attachments/assets/9ddf304a-510b-4cbd-b3f4-f69dadc1365a" />
+
+

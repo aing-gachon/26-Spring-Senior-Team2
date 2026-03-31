@@ -14,5 +14,23 @@
       ],
       "Fixed": []
     }
+  },
+  {
+    "timestamp": "2026-03-31T22:20:00+09:00",
+    "changes": {
+      "Added": [
+        "Docs/DDQN_Architecture_DeepDive.md 문서를 생성하여 논문 블랙박스(CNN+FC) 및 Optimizer 상세 설정 보존",
+        "evaluate.py 스크립트에 G-Mean(기하 평균) 도출 수식 추가"
+      ],
+      "Changed": [
+        "데이터로더(dataset.py)를 폴더명 기반(Nodule, Normal) 직접 인식 구조로 개선하여 복잡한 CSV 의존성 제거",
+        "config.yaml 하이퍼파라미터 논문 일치화 (lr: 0.00025, gamma: 0.1, batch_size: 64, num_episodes Test 5)",
+        "environment.py에 소수 타겟(Nodule) 판독 시 +50 보상을 주는 차등 보상(Adaptive Reward) 체계 도입"
+      ],
+      "Fixed": [
+        "ResNet50 텐서 크래시를 transforms.py 내 RepeatChanneld 적용으로 3채널화시켜 핫픽스",
+        "src/data/__init__.py 내부의 삭제 함수 참조로 인한 ImportError 수리완료"
+      ]
+    }
   }
 ]

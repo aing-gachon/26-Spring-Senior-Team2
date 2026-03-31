@@ -64,6 +64,7 @@ ENV/
 .vscode/
 
 # Dataset and Large Media Files for CXR8
+data/
 images/
 LongTailCXR/
 MAPLEZ*/

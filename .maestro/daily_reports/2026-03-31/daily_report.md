@@ -1,20 +1,43 @@
-# 📅 일일 작업 상황 보고서 (Daily Report)
-**작성일**: 2026년 3월 31일
+# 🗓️ Daily Report - 2026년 3월 31일
 
-## 1. 오늘의 작업 목표
-- 기존에 구상되었던 BicDRL(불균형 의료 데이터 다중 라벨링) 프레임워크 구조를 **PyTorch 와 MONAI 베이스로 완벽히 밑바닥부터 재구축**.
-- 15개 질병을 취급하는 구조에서 실험 모델링 전제조건에 맞춘 **'Nodule' vs 'No Finding'** 의 극심한 불균형 이진 데이터셋(1:50 비율) 처리에 최적화.
+---
+## [1차 세션 (이전 기록 복구)]
 
-## 2. 작업 달성 내역
-- 파일 단위 코드 모음을 용도에 따른 폴더 단위 컴포넌트로 완벽 분리 적용 (`src/data`, `src/models`, `src/rl`, `src/utils`).
-- 강화학습의 에피소드 전개 루프(`train.py`) 및 모델 검증 스크립트(`evaluate.py`) 구현을 통해 분산된 모듈 통합 완료.
-- `uv` 패키지 관리자를 사용하여 Python 3.12 기반 의존성(`requirements.txt`) 논의 및 세팅 가이드라인 제안.
+### 🕒 목표
+- 프로젝트 모듈 분리 및 강화학습 뼈대 구축 (MedicalImageEnv, DDQN Agent 연동)
 
-## 3. 발생했던 문제점 및 해결 (Troubleshooting)
-- **문제점**: 소수 결절(Nodule) 이미지 5장과 일반 정상 이미지 250장에 대한 하드 코딩 스크립트 적용 시 프로젝트 재사용성 및 확장성 부재 우려. 
-- **해결책 (Fix)**: 질병 이름 문자열 데이터, 질병 추출 목표 개수, 병변 데이터 대비 정상 데이터 증폭 배율(Ratio) 파라미터들을 파이썬 코드 전체에서 추출하여 **`configs/config.yaml` 환경설정 파일로 옮김(동적 파라미터화)**. 
-- **효과**: 추후 코드나 로직 수정 없이 오로지 `yaml` 파일 내 글자 수정만으로 다른 종류의 질병 병변('Pneumonia', 'Atelectasis' 등)도 즉시 학습 가능한 상태가 됨.
+### 🛠 수정 내용
+- 15개 질병을 취급하던 다중 분류를 특정 1개(Nodule 등) vs 정상 모델로 스코프 축소.
+- MONAI 기반 파이프라인 생성 및 `configs/config.yaml` 중앙 통제소 설립.
+- DataFrame(CSV)를 이용한 Image Loader 및 1:50 데이터 비율 추출 함수 구현.
+- Double DQN + Prioritized Replay Buffer 메모리 스크립트 작성.
 
-## 4. 익일 핵심 작업 계획
-- 팀원 간 소스 코드 리뷰 진행.
-- 실제 데이터셋 몇 백장을 투입해 보고 `Memory Out` 이슈나 MONAI 전처리 호환성 검증(Integration Test) 진행하기.
+---
+
+## [2차 세션 (최신 업데이트 내역)]
+
+### 🕒 오늘의 목표 (Objective)
+- BicDRL 논문의 설계 의도를 완전히 분해하여, 기존 파이프라인의 **보상, 평가, 하이퍼파라미터, 전처리 체계**를 논문의 실제 은닉된 실험 환경과 100% 동기화하고 최초의 터미널 훈련 실행(Test Run)을 성공시킨다.
+
+### 🛠 수정된 내부 아키텍처 (Modified Files)
+1. **`src/data/dataset.py` & `data/raw/` 폴더 구조화**
+   - 방대한 CSV 파일을 뒤지는 구시대적 방식 폐기. 직관적인 `Nodule`과 `No Finding` ImageFolder 스로틀 방식을 도입하여 작업 난이도를 대폭 하락.
+2. **`configs/config.yaml` 튜닝**
+   - 테스트를 위한 에피소드 극단적 축소(5000 ➔ 5)
+   - 저자 실제 세팅값 일치화 완료 (학습률 `0.00025`, 할인율 `0.1`, 배치 `64`)
+3. **`src/rl/environment.py` 보상 체계 개편**
+   - 극심한 불균형(1:50) 극복을 위한 Nodule(+50), Normal(+1) 차등 보상공식 신규 적용.
+4. **`src/data/transforms.py` 강화**
+   - 흑백 사진용 3채널 병합 기능 확충 (ResNet50 호환)
+5. **`evaluate.py` 평가 고도화**
+   - 단순 F1-score 뿐만 아니라 모델의 실제 임상 성능을 증명할 `G-Mean(Sens * Spec)` 도출식 개발.
+6. **`Docs/DDQN_Architecture_DeepDive.md` (NEW)**
+   - 논문에 숨겨진 백본 CNN+FC 하이브리드 투트랙 모델의 설계 당위성을 문서화.
+
+### 🚨 문제 발생 및 트러블슈팅 (Issues & Troubleshooting)
+- **에러 1**: `1 Channel vs 3 Channel (ResNet50)` -> `transforms.py`에 `RepeatChanneld(3)` 긴급 투입하여 스케일링 방어 및 해결.
+- **에러 2**: `ImportError` -> `dataset.py`에서 삭제된 함수를 부르던 `__init__.py` 청소 완료.
+- **현상 3**: `Loss 값이 0.0` -> 고장이 아닌 **초기 경험 결핍에 따른 정상 대기 현상**. 버퍼 정원(64개) 초과 시점부터 연산 재개 검증.
+
+### 🎯 다음 진행 예정 사항 (Next Milestones)
+- **Google Colab (NVIDIA T4 GPU)** 환경을 통해 코드를 연동시키고, 실제 논문 기재 수치인 5000 Episodes 실전 마라톤 완전 훈련 가동 예정.

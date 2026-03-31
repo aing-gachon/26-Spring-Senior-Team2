@@ -20,6 +20,12 @@ def load_and_filter_data(csv_path, image_dir, epsilon=1e-5):
     
     if not os.path.exists(csv_path):
         print(f"[Warning] CSV not found at {csv_path}. Using dummy dictionary for setup testing.")
+        # 더미 이미지 생성 (MONAI 로딩 테스트용)
+        if not os.path.exists("dummy.png"):
+            from PIL import Image
+            img = Image.new('L', (256, 256), color=128)
+            img.save("dummy.png")
+            
         # Dummy data for pipeline validation
         class_counts = {0: 100, 1: 10} # Imbalanced scenario
         for i in range(110):

@@ -1,61 +1,307 @@
-# 강화 학습 기반 CXR ROI 탐색 및 진단 모델 구현 계획
+인성
+insung0615
+온라인
 
-고해상도 흉부 X-ray(CXR) 원본 데이터에서 강화학습(RL) 에이전트를 통해 질병 의심 구역(ROI)을 우선적으로 찾고, 해당 패치만을 정밀 분석하여 연산 리소스를 절감하는 진단 추천 시스템 구축 목적입니다.
+#2팀 채널의 시작이에요. 
+유시현/소웨/20 — 2026-03-10 오후 7:21
+https://github.com/Project-MONAI/tutorials/tree/main/detection
+GitHub
+tutorials/detection at main · Project-MONAI/tutorials
+MONAI Tutorials. Contribute to Project-MONAI/tutorials development by creating an account on GitHub.
+MONAI Tutorials. Contribute to Project-MONAI/tutorials development by creating an account on GitHub.
+류건우/인지/21 [ZZZ],  — 2026-03-10 오후 7:34
+../tree/main/detection
+../blob/main/3d_segmentation/brats_segmentation_3d.ipynb
+등 사용하여 종양 위치 찾기 할 예정
+이후 RL 적용
+[관련 데이터셋]
+https://www.cancerimagingarchive.net/access-data/
+https://docs.cloud.google.com/healthcare-api/docs/resources/public-datasets/nih-chest?hl=ko
+The Cancer Imaging Archive (TCIA)
+Jeff Tobler
+Access the Data - The Cancer Imaging Archive (TCIA)
+Access the Data - The Cancer Imaging Archive (TCIA)
+Google Cloud Documentation
+NIH 흉부 X선 데이터 세트  |  Cloud Healthcare API  |  G...
+NIH 흉부 X선 데이터 세트  |  Cloud Healthcare API  |  G...
+이미지
+ [ZZZ], 
+류건우/인지/21 [ZZZ],  — 2026-03-10 오후 7:42
+3d_segmentation/torch 디렉토리에 있는 unet_training_array.py 실행 결과
 
-1024x1024 고해상도 이미지를 저해상도 글로벌 뷰와 고해상도 로컬 패치로 이원화하여 연산 효율을 극대화하고, NIH 데이터셋의 Multi-label 정보를 활용 및 BBox 데이터를 초기 학습에 사용하여 전체적인 아키텍처를 구성합니다.
+예제 코드가 정상적으로 훈련 파이프라인(가상 3D 이미지 데이터 생성, 3D U-Net 신경망 모델, 평가 지표 계산 등)을 수행함을 확인함
+
+훈련이 진행되며 Loss 값이 0.61에서 약 0.39까지 순조롭게 감소하였으며, 학습의 성능 지표인 Dice score(정확도) 역시 평가 기준을 넘어서 최고 0.9376까지 기록
+유시현/소웨/20 — 2026-03-10 오후 7:48
+종양위치 MONAI로 분류 후 종양 위치 Label data를 기반으로 HeatMap 작성 후 RL을 통해서 종양 위치 탐색(location이 아닌 Probablility로 계산 할듯)
+종양위치 MONAI로 분류 후 종양 위치 Label data를 기반으로
+메시지 12개 ›
+스레드에 새 메시지가 없어요.
+18일 전
+송이두/컴공/22
+ 님이 종양위치 MONAI로 분류 후 종양 위치 Label data를 기반으로 스레드를 시작하셨어요(스레드 모두 보기). — 2026-03-12 오후 5:50
+류건우/인지/21
+ 님이 New 주제 스레드를 시작하셨어요(스레드 모두 보기). — 2026-03-24 오후 7:12
+New 주제
+메시지 14개 ›
+유시현/소웨/20
+6일 전
+﻿
+류건우/인지/21 [ZZZ],  — 2026-03-24 오후 7:12
+.
+[상세 구현 계획]
+## 실험 재현 파이프라인 (BicDRL 프레임워크 기반)
+#### 1. 데이터셋 정제 및 단순화 (다중 클래스/이진 분류화)
+
+NIH Chest X-ray 14 데이터셋(`Data_Entry_2017_v2020.csv`)의 다중 라벨(Multi-label) 특성을 에이전트가 학습할 수 있는 환경(MDP)에 맞게 다중 클래스(Multi-class) 또는 이진 분류(Binary) 형태로 단순화합니다.
+
+- **Single-finding 필터링:** 한 이미지에 여러 질병이 있는 케이스는 제외하고, 오직 단일 질병(예: 'Pneumothorax'만 있는 경우) 혹은 정상(No Finding)인 데이터만 추출합니다. (논문에서도 Chest X-ray 데이터셋을 이진 분류 테스크로 구성하여 실험했습니다 ).
+    
+- **라벨 인코딩:** 추출된 질병명을 기반으로 클래스 인덱스(0, 1, 2 등)를 부여합니다. 이 값은 에이전트가 행동을 취한 후 정답 여부를 판별하기 위한 **실제 정답 라벨($b_t$)**로만 사용됩니다.
+    
+- **클래스 가중치 계산:** 학습 전, 각 클래스별 전체 샘플 수($c_k$)를 카운트하여 보상 함수에 쓰일 적응형 가중치 $\gamma_k = 1 / \ln(c_k + \epsilon)$를 미리 계산해 둡니다.
+    
+
+#### 2. 의료 이미지 전처리 (MONAI 활용 상태(State) 구성)
+
+에이전트에게 환경의 상태($s_t$)로 넘겨줄 원본 이미지를 딥러닝 연산에 적합한 텐서로 변환합니다. (오해의 소지가 있었던 Dice Loss 등 분할/크롭 개념은 완전히 배제합니다.)
+
+- `LoadImaged`: 원본 X-ray 이미지 파일을 로드합니다.
+    
+- `EnsureChannelFirstd`: 이미지의 채널 차원을 배치합니다 (예: `[1, H, W]`).
+    
+- `Resized`: 네트워크 입력 규격에 맞게 해상도를 고정합니다 (예: 224x224).
+    
+- `ScaleIntensityd`: 모델 학습 안정성을 위해 픽셀 값을 0~1 사이로 정규화합니다.
+    
+- `EnsureTyped`: 파이토치(PyTorch) Tensor 자료형으로 최종 변환합니다. 이 결과물이 에이전트가 관찰할 **상태($s_t$)**가 됩니다.
+    
+
+#### 3. 에이전트 아키텍처 설계 (CNN 결합형 Q-Network)
+
+가장 중요한 구조적 변경입니다. 단순 평탄화(Flatten)가 아닌, 이미지 특징을 추출할 수 있도록 에이전트 내부의 Q-Network(`MainNet` 및 `TargetNet`)에 CNN 백본을 결합합니다.
+
+- **특징 추출기 (Feature Extractor):** MONAI에서 제공하는 `ResNet50`이나 `DenseNet121`과 같은 CNN 모델을 가져와 `MainNet`의 앞단(Backbone)으로 배치합니다. (단, 마지막 분류 Layer는 제거합니다).
+    
+- **Q-Value 출력 계층 (FC Layer):** CNN을 통과해 나온 특징 벡터(Feature Vector)를 Fully Connected Layer에 연결합니다. 이 계층의 최종 출력 노드 수는 우리가 정의한 **클래스(행동 공간 $\mathcal{A}$)의 개수**와 동일해야 합니다.
+    
+- 최종적으로 네트워크는 상태 $s_t$를 입력받아 각 행동(클래스 예측)에 대한 기대 보상값인 Q-value를 출력합니다.
+    
+
+#### 4. 보상 함수(Reward Function) 구현
+
+논문의 핵심인 DDQNbic 알고리즘의 보상 체계를 코드로 구현합니다.
+
+- 에이전트가 예측한 라벨($a_t$)과 1단계에서 만든 정답 라벨($b_t$)을 비교합니다.
+    
+- 일치하면($a_t = b_t$), 긍정적인 보상 $r_t = \gamma_k$를 부여합니다.
+    
+- 불일치하면($a_t \neq b_t$), 부정적인 보상 $r_t = -\gamma_k$를 부여합니다.
+    
+- 소수 클래스일수록 $\gamma_k$ 값이 크므로, 소수 클래스를 맞췄을 때 더 큰 보상을, 틀렸을 때 더 큰 페널티를 받게 됩니다.
+    
+
+#### 5. DDQN 훈련 루프 실행
+
+- 배치 단위로 $s_t$를 Q-Network에 입력하여 Epsilon-greedy 전략으로 행동 $a_t$를 선택합니다.
+    
+- 환경(보상 함수)으로부터 보상 $r_t$를 받고, 튜플 $(s_t, a_t, r_t, s_{t+1})$을 경험 재생 버퍼(Replay Buffer)에 저장합니다. 논문과 동일하게 Prioritized Experience Replay(PER)를 적용하여 TD 에러가 큰 샘플을 우선적으로 학습시킵니다.
+    
+- Adam 옵티마이저를 사용해 `MainNet`을 업데이트하고, 주기적으로 `TargetNet`에 가중치를 복사(Soft/Hard update)하여 과대평가(Overestimation)를 방지합니다.
+
+pipeline.md
+5KB
+[단순화 (Readme)]
+# 🚀 BicDRL-Reproduction: Deep Reinforcement Learning for Imbalanced Medical Image Classification
+
+## 📌 Project Overview
+
+본 프로젝트는 심층 강화학습(DRL)을 활용하여 의료 이미지 데이터의 극심한 클래스 불균형(Class Imbalance) 문제를 해결하는 **BicDRL 프레임워크**를 PyTorch와 MONAI를 기반으로 구현하고 재현하는 것을 목표로 합니다.
+
+에이전트(Agent)가 소수 클래스(희귀 병변)를 정확히 분류했을 때 더 높은 보상을 주는 적응형 보상 메커니즘을 적용하며, **NIH Chest X-ray 14** 데이터셋을 활용하여 학습 파이프라인을 구축합니다.
 
 ---
 
-## 1. 강화 학습 환경 (RL Environment) 설계
+## 🏗️ System Pipeline
 
-### 1.1 상태 (State) 및 공간 구조
-*   **물리적 정보**: 현재 에이전트가 바라보고 있는 윈도우(Window)의 위치와 크기 좌표 정보.
-*   **시각적 정보**: 전체 이미지의 저해상도 뷰(Global Context, 예: 256x256) 및 현재 윈도우의 특징 데이터.
-*   **시간/이력 문맥 (Temporal & History Context)**: 에이전트가 과거 탐색 궤적을 맴도는 무한 루프(Looping)에 빠지는 것을 방지하기 위해 **LSTM/GRU 모듈**을 백본에 결합하여 직전 $k$ 스텝의 이동 이력(Action History) 및 시계열 변화량을 State로 기억하도록 합니다. 또는 각 스텝의 ROI 마스크(Mask) 채널을 Global Context에 차례대로 쌓아서 누적 방문 상태 맵을 입력으로 활용합니다.
+### Phase 1. Data Preparation & Simplification (데이터 정제 및 환경 구축)
 
-### 1.2 행동 (Action) 공간 (Continuous Control)
-*   **탐색 제어 (Scale & Shift)**: DQN 기반의 고정된 보폭 이동(상/하/좌/우 이산 제어)이 아닌, **PPO (Proximal Policy Optimization)** 알고리즘을 활용한 **연속 행동 공간(Continuous Action Space)** 제어를 설계합니다.
-    *   에이전트는 $[-1, 1]$ 사이의 벡터 $[dx, dy, dw, dh]$ 차원을 출력합니다. 중심 좌표($dx, dy$)의 미세 이동과 윈도우 크기 변화 비율($dw, dh$) 파라미터로 사용하여, 환경 내에서 동적이고 정밀한 ROI Stride/Zoom 궤적을 산출합니다.
-*   **확정 (Terminal Action)**: "여기가 질병 의심 구역이다"라고 선언하고 프레임워크에 정밀 진단 분석을 요청하는 중단 시그널.
+NIH 데이터셋의 다중 라벨(Multi-label) 특성을 강화학습 에이전트의 단일 행동(Action) 공간에 맞게 단순화합니다.
 
-### 1.3 보상 함수 (Reward Shaping)
-에이전트의 신속하고 안정적인 수렴을 위해 단일 이진 보상(+) 대신 세분화된 보상 체계를 결합합니다.
-*   **$\Delta$ IoU 점진적 보상 (Dense Reward)**: 이전 탐색 윈도우 대비 현재 스텝에서의 실제 BBox(Ground Truth)와의 **IoU (Intersection over Union)** 증가량에 비례하여 양(+)의 보상을 지급하여, 정답 지점을 향한 자연스러운 흐름을 유도합니다. (멀어질 경우 패널티 부여).
-*   **탐색 효율성 패널티 (Efficiency & Coverage Penalty)**: 
-    *   스텝 길이에 비례한 기본 감가(음(-)의 패널티).
-    *   이미 방문했던 영역과 높은 IoU로 겹치는 구역을 재탐색할 경우 주어지는 순환 패널티로, 새로운 이미지 영역을 탐색하도록 강제합니다.
-*   **최종 진단 보상**: 확정(Terminal) 액션 후, 선별된 최종 ROI 내에서 분류 모델(Classifier)이 도출한 예측 클래스의 정답 확률과 실제 라벨 간의 BCE Loss 혹은 일치도를 최종 Reward로 사용합니다.
+- **단일 병변 필터링:** `Data_Entry_2017_v2020.csv`에서 단일 질병(예: Pneumothorax)만 가진 케이스와 정상(No Finding) 케이스를 추출하여 이진 분류(Binary Classification) 또는 다중 클래스(Multi-class) 데이터셋으로 구성합니다.
+    
+- **라벨 인코딩 (Metadata):** 에이전트의 보상 평가를 위한 실제 정답 라벨($b_t$)로 사용할 수 있도록 타깃 질병을 인코딩합니다.
+    
+- **적응형 클래스 가중치 계산:** 학습 전 전체 훈련 데이터의 클래스 분포를 분석하여, 보상 함수에 사용할 적응형 가중치 $\gamma_k = 1 / \ln(c_k + \epsilon)$ 를 사전 계산합니다. ($c_k$: 해당 클래스의 샘플 수)
+    
+
+### Phase 2. Medical Image Preprocessing (MONAI 기반 전처리)
+
+원시 의료 이미지(Raw Data)를 에이전트가 관찰할 수 있는 상태(State, $s_t$) 텐서로 정제합니다.
+
+- `LoadImaged`: X-ray 이미지 원본을 로드합니다.
+    
+- `EnsureChannelFirstd`: 딥러닝 연산 규격에 맞춰 채널 차원을 배치합니다.
+    
+- `Resized`: 네트워크 입력 크기(예: `224x224`)에 맞춰 해상도를 조정합니다.
+    
+- `ScaleIntensityd`: 모델 학습의 안정성과 속도 향상을 위해 픽셀 값을 `0~1` 스케일로 정규화합니다.
+    
+- `EnsureTyped`: 최종적으로 PyTorch Tensor 형태로 변환하여 에이전트 환경(Environment)에 전달할 준비를 마칩니다.
+    
+
+### Phase 3. DRL Agent Architecture (CNN 기반 DDQN 설계)
+
+의료 이미지의 공간적 특징을 추출하기 위해 Q-Network 내부에 CNN 백본을 결합한 에이전트를 설계합니다.
+
+- **특징 추출기 (Feature Extractor):** `ResNet50` 또는 `DenseNet121` 구조를 차용하여 `MainNet`과 `TargetNet`의 전면부에 배치합니다. (단, 기존의 마지막 분류 계층은 제거합니다).
+    
+- **Q-Value 출력 계층 (FC Layer):** 추출된 특징 벡터(Feature Vector)를 입력받아, 최종적으로 에이전트의 행동 공간(정의된 클래스 개수) 크기와 동일한 개수의 Q-value를 출력하도록 선형 계층을 구성합니다.
+    
+
+### Phase 4. Environment & Reward Mechanism (환경 및 보상 체계)
+
+에이전트의 예측과 실제 정답을 비교하여 클래스 불균형을 해소하는 핵심 강화학습 루프입니다.
+
+- **상태 관찰 ($s_t$):** Phase 2에서 전처리된 이미지 텐서를 에이전트가 관찰합니다.
+    
+- **행동 선택 ($a_t$):** $\epsilon$-greedy 전략에 따라 이미지가 속할 클래스를 예측(Action)합니다.
+    
+- **보상 계산 ($r_t$):** * 정답 시 ($a_t = b_t$): $r_t = \gamma_k$ (소수 클래스일수록 높은 긍정적 보상)
+    
+    - 오답 시 ($a_t \neq b_t$): $r_t = -\gamma_k$ (소수 클래스일수록 높은 페널티)
+        
+
+### Phase 5. Training Loop (모델 학습 및 최적화)
+
+DDQN(Double Deep Q-Network) 알고리즘을 기반으로 에이전트를 학습시킵니다.
+
+- **Prioritized Experience Replay (PER):** 튜플 $(s_t, a_t, r_t, s_{t+1})$ 을 버퍼에 저장하고, TD 에러가 큰(학습이 더 필요한) 샘플을 우선적으로 추출하여 학습합니다.
+    
+- **네트워크 업데이트:** Adam 옵티마이저를 사용하여 `MainNet`을 업데이트하며, Q-value의 과대평가를 방지하기 위해 주기적으로 `TargetNet`에 가중치를 동기화합니다.
+
+readme.md
+5KB
+[프레임워크 구조]
+이미지
+[파일 구조]
+# 📂 Project Directory Structure
+
+본 프로젝트는 PyTorch와 MONAI를 기반으로 심층 강화학습(DRL) 에이전트를 학습시키기 위해 모듈화된 파일 구조를 가집니다.
+
+```text
+BicDRL-Reproduction/
+│
+├── data/                       # 데이터셋 및 메타데이터 폴더 (gitignore 권장)
+│   ├── raw/                    # 원본 의료 이미지 (e.g., NIH Chest X-ray images)
+│   ├── processed/              # 전처리된 데이터 또는 분할된 데이터 (선택적)
+│   └── Data_Entry_2017.csv     # 정답 라벨이 포함된 원본 메타데이터 CSV 파일
+│
+├── configs/                    # 하이퍼파라미터 및 설정 파일 폴더
+│   └── config.yaml             # 학습률, 배치 사이즈, ε-decay, 경로 등 통합 설정
+│
+├── src/                        # 핵심 소스 코드 폴더
+│   ├── __init__.py
+│   ├── dataset.py              # 데이터 필터링(다중 라벨->단일 클래스) 및 MONAI DataLoader 구성
+│   ├── transforms.py           # MONAI 전처리 파이프라인 (Resize, Normalize, EnsureType 등)
+│   ├── networks.py             # CNN 백본(ResNet 등)과 결합된 Q-Network (MainNet, TargetNet) 구조
+│   ├── agent.py                # DDQN 에이전트 클래스, 행동 선택(ε-greedy) 및 네트워크 업데이트 로직
+│   ├── replay_buffer.py        # 경험 재생 버퍼 (Prioritized Experience Replay - PER 구현)
+│   ├── environment.py          # 강화학습 환경 구축 (상태 관찰, 정답 비교, 적응형 보상 함수 구현)
+│   └── utils.py                # 클래스 가중치(γ_k) 계산, 로깅, 시드(Seed) 고정 등 유틸리티 함수
+│
+├── train.py                    # 에이전트 학습을 실행하는 메인 스크립트 (Training Loop)
+├── evaluate.py                 # 학습된 모델의 성능 평가 (F1-score, G-mean 계산 및 테스트)
+│
+├── checkpoints/                # 학습 중 저장되는 모델 가중치(.pth) 폴더
+│   └── best_model.pth          # 가장 성능이 좋은 모델 파일
+│
+├── notebooks/                  # EDA 및 실험용 주피터 노트북 폴더
+│   └── 01_data_exploration.ipynb # 데이터 분포 확인 및 MONAI 전처리 테스트용 노트북
+│
+├── requirements.txt            # 프로젝트 실행에 필요한 패키지 목록 (PyTorch, MONAI, Pandas 등)
+└── README.md                   # 프로젝트 개요, 파이프라인 설명 및 실행 방법 안내
+
+Directory Structure.md
+3KB
++) Multi-class를 위한 기준 class
+: Nodule - 3cm 이하 작은 결절
++) 깃허브 싹 다 바꿔야 됨
+https://github.com/aing-gachon/26-Spring-Senior-Team2
+유시현/소웨/20 — 2026-03-24 오후 7:21
+첨부 파일 형식: acrobat
+A_Deep_Reinforcement_Learning_Framework_for_Imbalanced_Medical_Image_Classification.pdf
+5.75 MB
+https://github.com/project-monai/monai monai official repo
+GitHub
+GitHub - Project-MONAI/MONAI: AI Toolkit for Healthcare Imaging
+AI Toolkit for Healthcare Imaging. Contribute to Project-MONAI/MONAI development by creating an account on GitHub.
+GitHub - Project-MONAI/MONAI: AI Toolkit for Healthcare Imaging
+﻿
+# 🚀 BicDRL-Reproduction: Deep Reinforcement Learning for Imbalanced Medical Image Classification
+
+## 📌 Project Overview
+
+본 프로젝트는 심층 강화학습(DRL)을 활용하여 의료 이미지 데이터의 극심한 클래스 불균형(Class Imbalance) 문제를 해결하는 **BicDRL 프레임워크**를 PyTorch와 MONAI를 기반으로 구현하고 재현하는 것을 목표로 합니다.
+
+에이전트(Agent)가 소수 클래스(희귀 병변)를 정확히 분류했을 때 더 높은 보상을 주는 적응형 보상 메커니즘을 적용하며, **NIH Chest X-ray 14** 데이터셋을 활용하여 학습 파이프라인을 구축합니다.
 
 ---
 
-## 2. 모델 아키텍처 (Model Architecture)
+## 🏗️ System Pipeline
 
-*   **탐색 에이전트 (RL Agent)**:
-    *   **PPO (Proximal Policy Optimization)** 알고리즘을 기반으로, ResNet-18 등의 CNN 백본을 통해 현재 윈도우 피처를 추출하고, Global 뷰와 LSTM 모듈에서 생성된 은닉 층(Hidden State)을 결합하여 Actor-Critic 네트워크의 입력으로 사용합니다.
-*   **정밀 진단 분류 모델 (Classifier)**:
-    *   MONAI 프레임워크의 `DenseNet121` 또는 `EfficientNet`을 활용하여 최종 14종 병변 (Atelectasis, Cardiomegaly 등)에 대한 Multi-label 분류를 수행합니다.
+### Phase 1. Data Preparation & Simplification (데이터 정제 및 환경 구축)
 
----
+NIH 데이터셋의 다중 라벨(Multi-label) 특성을 강화학습 에이전트의 단일 행동(Action) 공간에 맞게 단순화합니다.
 
-## 3. 학습 전략 (Step-by-Step Training)
+- **단일 병변 필터링:** `Data_Entry_2017_v2020.csv`에서 단일 질병(예: Pneumothorax)만 가진 케이스와 정상(No Finding) 케이스를 추출하여 이진 분류(Binary Classification) 또는 다중 클래스(Multi-class) 데이터셋으로 구성합니다.
+    
+- **라벨 인코딩 (Metadata):** 에이전트의 보상 평가를 위한 실제 정답 라벨($b_t$)로 사용할 수 있도록 타깃 질병을 인코딩합니다.
+    
+- **적응형 클래스 가중치 계산:** 학습 전 전체 훈련 데이터의 클래스 분포를 분석하여, 보상 함수에 사용할 적응형 가중치 $\gamma_k = 1 / \ln(c_k + \epsilon)$ 를 사전 계산합니다. ($c_k$: 해당 클래스의 샘플 수)
+    
 
-에이전트가 탐색 과정을 수행할 때 일관된 목적지침을 갖기 위해서는 보상으로 활용될 분류기 모델이 먼저 일정 수준 이상의 정확도를 갖추어야 합니다.
+### Phase 2. Medical Image Preprocessing (MONAI 기반 전처리)
 
-*   **Phase 0 (Classifier Pre-training)**:
-    *   본격적인 RL 강화학습 전, 제공되는 BBox 데이터 영역으로 크롭(Crop) 및 리사이즈된 이미지 패치들을 이용하여 DenseNet121 분류 모델을 먼저 지도 학습(Supervised Learning)시킵니다. 에이전트가 질병 위치를 정확히 짚어냈을 때 신뢰성 있는 보상(정답 확률)을 모델이 출력할 수 있도록 가중치를 초기화하는 과정입니다.
-*   **Phase 1 (Agent Supervised Pre-training)**:
-    *   BBox 정답이 존재하는 일부 훈련 이미지를 활용하여, 에이전트가 정답 위치로 빠르게 이동하는 궤적을 모방하도록(Imitation Learning/Behavior Cloning) 지도 학습시킵니다.
-*   **Phase 2 (RL Fine-tuning in Frozen Classifier)**:
-    *   Phase 0 에서 학습된 Classifier의 가중치를 고정(Freeze)하고, 전체 데이터셋 환경으로 확장하여 환경-에이전트 간의 상호작용 속에서 PPO 정책 모델을 최적화(조밀 보상 수집)합니다.
-*   **Phase 3 (Joint E2E Optimization)**:
-    *   탐색(Agent)과 진단(Classifier) 모듈을 조인하여, 에이전트의 ROI가 진단 정확도를 극대화시키는 방향으로 양쪽 네트워크를 동시에 미세 조정(Fine-tuning) 합니다.
+원시 의료 이미지(Raw Data)를 에이전트가 관찰할 수 있는 상태(State, $s_t$) 텐서로 정제합니다.
 
----
+- `LoadImaged`: X-ray 이미지 원본을 로드합니다.
+    
+- `EnsureChannelFirstd`: 딥러닝 연산 규격에 맞춰 채널 차원을 배치합니다.
+    
+- `Resized`: 네트워크 입력 크기(예: `224x224`)에 맞춰 해상도를 조정합니다.
+    
+- `ScaleIntensityd`: 모델 학습의 안정성과 속도 향상을 위해 픽셀 값을 `0~1` 스케일로 정규화합니다.
+    
+- `EnsureTyped`: 최종적으로 PyTorch Tensor 형태로 변환하여 에이전트 환경(Environment)에 전달할 준비를 마칩니다.
+    
 
-## 4. Verification Plan
+### Phase 3. DRL Agent Architecture (CNN 기반 DDQN 설계)
 
-### 시각적/정량적 검증 (Automated & Manual)
-*   **탐색 궤적 시각화**: 테스트 셋에 대해 $t=0$ 에서 $t=terminal$ 까지 에이전트의 윈도우 이동 궤적을 애니메이션(GIF/Video) 형태로 확인하여 무한 루프나 발산 여부 모니터링.
-*   **지표 측정**:
-    *   Agent가 BBox를 찾아낸 평균 탐색 스텝 수 및 BBox와의 최종 평균 IoU 확률.
-    *   기존 원본 고해상도(1024x1024) 이미지를 통째로 사용할 때 대비, 256x256 View + 고해상도 ROI 패치 시스템의 **연산 속도 증가율 및 FLOPs 감소폭** 비교 검증.
+의료 이미지의 공간적 특징을 추출하기 위해 Q-Network 내부에 CNN 백본을 결합한 에이전트를 설계합니다.
+
+- **특징 추출기 (Feature Extractor):** `ResNet50` 또는 `DenseNet121` 구조를 차용하여 `MainNet`과 `TargetNet`의 전면부에 배치합니다. (단, 기존의 마지막 분류 계층은 제거합니다).
+    
+- **Q-Value 출력 계층 (FC Layer):** 추출된 특징 벡터(Feature Vector)를 입력받아, 최종적으로 에이전트의 행동 공간(정의된 클래스 개수) 크기와 동일한 개수의 Q-value를 출력하도록 선형 계층을 구성합니다.
+    
+
+### Phase 4. Environment & Reward Mechanism (환경 및 보상 체계)
+
+에이전트의 예측과 실제 정답을 비교하여 클래스 불균형을 해소하는 핵심 강화학습 루프입니다.
+
+- **상태 관찰 ($s_t$):** Phase 2에서 전처리된 이미지 텐서를 에이전트가 관찰합니다.
+    
+- **행동 선택 ($a_t$):** $\epsilon$-greedy 전략에 따라 이미지가 속할 클래스를 예측(Action)합니다.
+    
+- **보상 계산 ($r_t$):** * 정답 시 ($a_t = b_t$): $r_t = \gamma_k$ (소수 클래스일수록 높은 긍정적 보상)
+    
+    - 오답 시 ($a_t \neq b_t$): $r_t = -\gamma_k$ (소수 클래스일수록 높은 페널티)
+        
+
+### Phase 5. Training Loop (모델 학습 및 최적화)
+
+DDQN(Double Deep Q-Network) 알고리즘을 기반으로 에이전트를 학습시킵니다.
+
+- **Prioritized Experience Replay (PER):** 튜플 $(s_t, a_t, r_t, s_{t+1})$ 을 버퍼에 저장하고, TD 에러가 큰(학습이 더 필요한) 샘플을 우선적으로 추출하여 학습합니다.
+    
+- **네트워크 업데이트:** Adam 옵티마이저를 사용하여 `MainNet`을 업데이트하며, Q-value의 과대평가를 방지하기 위해 주기적으로 `TargetNet`에 가중치를 동기화합니다.

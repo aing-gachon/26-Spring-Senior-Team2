@@ -1,0 +1,18 @@
+[
+  {
+    "timestamp": "2026-03-31T17:00:00+09:00",
+    "changes": {
+      "Added": [
+        "OpenAI Gymnasium 기반의 의료 엑스레이 환경(MedicalImageEnv) 구축.",
+        "MONAI 라이브러리를 사용한 이미지 전처리 체인 도입.",
+        "Double DQN 기반 에이전트 클래스 생성 및 PER 메모리 큐 추가."
+      ],
+      "Changed": [
+        "15개 질병의 다중 라벨링(Multi-label) 구조를 이진 분류(Nodule vs No Finding)로 프로젝트 규모 전면 축소 및 집중.",
+        "CSV 데이터로더(dataset.py) 로직을 개선하여 자동 이미지 경로 병합 및 1:50 비율 동적 할당 알고리즘 적용.",
+        "하드 코딩 방지를 위해 configs/config.yaml 설정 변수 분리."
+      ],
+      "Fixed": []
+    }
+  }
+]

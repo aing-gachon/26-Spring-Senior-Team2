@@ -38,3 +38,6 @@ Thumbs.db
 # Project-specific ignored folders
 plan/
 pr_description.md
+
+# Google Drive Sync temps
+.tmp.*

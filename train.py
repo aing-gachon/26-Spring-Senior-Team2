@@ -84,10 +84,14 @@ def train_agent():
             
             # 버퍼 용량이 차면 학습 시작
             if len(replay_buffer) > batch_size:
-                # 무작위 샘플링
-                states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size)
-                # 모델 가중치 업데이트 (MainNet)
-                loss = agent.train_step(states, actions, rewards, next_states, dones)
+                # PER 샘플링
+                states, actions, rewards, next_states, dones, indices, weights = replay_buffer.sample(batch_size)
+                # 모델 가중치 업데이트 (MainNet) 및 TD 에러 반환
+                loss, td_errors = agent.train_step(states, actions, rewards, next_states, dones, weights)
+                
+                # TD 에러를 기반으로 버퍼의 우선순위 업데이트
+                replay_buffer.update_priorities(indices, td_errors)
+                
                 loss_history.append(loss)
                 agent.decay_epsilon()
                 

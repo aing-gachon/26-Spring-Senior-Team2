@@ -51,7 +51,7 @@ class DDQNAgent:
         """
         self.target_net.load_state_dict(self.main_net.state_dict())
 
-    def train_step(self, states, actions, rewards, next_states, dones):
+    def train_step(self, states, actions, rewards, next_states, dones, weights=None):
         """
         Replay Buffer에서 샘플링한 배치 데이터(Tuple)를 사용해 MainNet 가중치 업데이트
         """
@@ -60,6 +60,8 @@ class DDQNAgent:
         rewards = rewards.to(self.device).float()
         next_states = next_states.to(self.device).float()
         dones = dones.to(self.device).float()
+        if weights is not None:
+            weights = weights.to(self.device).float()
 
         # 현재 상태의 Q-value 계산 (MainNet)
         q_values = self.main_net(states)
@@ -71,10 +73,15 @@ class DDQNAgent:
             next_q = self.target_net(next_states).gather(1, next_actions).squeeze(1)
             target_q = rewards + (self.gamma * next_q * (1 - dones))
 
-        # 손실 계산 및 역전파
-        loss = self.criterion(current_q, target_q)
+        # TD 에러 및 PER 가중치가 적용된 손실 계산
+        td_errors = torch.abs(target_q - current_q).detach()
+        if weights is not None:
+            loss = (weights * (target_q - current_q) ** 2).mean()
+        else:
+            loss = self.criterion(current_q, target_q)
+            
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
         
-        return loss.item()
+        return loss.item(), td_errors.cpu().numpy()

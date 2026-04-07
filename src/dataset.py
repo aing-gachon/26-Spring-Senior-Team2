@@ -6,10 +6,10 @@ from monai.data import Dataset, DataLoader
 from .transforms import get_transforms
 
 def extract_label(finding):
-    # Nodule 이진 분류 ('No Finding' -> 0, 'Nodule' 포함 병변 -> 1, 그 외 타질병 -> -1 무시)
+    # Nodule 이진 분류 ('No Finding' -> 0, 'Nodule' 단일 병변 -> 1, 그 외 복합/타질병 -> -1 무시)
     if pd.isna(finding) or finding == 'No Finding':
         return 0
-    elif 'Nodule' in str(finding):
+    elif finding == 'Nodule':
         return 1
     return -1
 

@@ -15,8 +15,18 @@ def evaluate():
     test_loader = get_dataloader(data_dicts, batch_size=config['agent']['batch_size'], phase='test')
     
     # 2. 모델 로드
+    import os
+    import glob
     model = DDQNNetwork(num_classes, config['agent']['backbone']).to(device)
-    model.load_state_dict(torch.load("checkpoints/best_model.pth", map_location=device))
+    
+    checkpoint_dirs = glob.glob("checkpoints/*/")
+    if not checkpoint_dirs:
+        raise FileNotFoundError("No checkpoints found in 'checkpoints/' directory.")
+    latest_dir = max(checkpoint_dirs, key=os.path.getmtime)
+    best_model_path = os.path.join(latest_dir, "best_model.pth")
+    
+    print(f"Loading model from {best_model_path}...")
+    model.load_state_dict(torch.load(best_model_path, map_location=device))
     model.eval()
     
     # 3. 평가 메트릭 수집
@@ -35,6 +45,8 @@ def evaluate():
             
             all_preds.extend(actions.cpu().numpy())
             all_targets.extend(labels.cpu().numpy())
+            
+            print(f"Batch {i+1} 평가 완료")
             
     # 평가 지표 (F1-score 등) 출력
     acc = accuracy_score(all_targets, all_preds)

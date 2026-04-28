@@ -14,5 +14,5 @@ def _set_seed(seed=42):
     
 def get_config(yaml_path):
     import yaml
-    with open(yaml_path, 'r') as file:
+    with open(yaml_path, 'r', encoding='utf-8') as file:
         return yaml.safe_load(file)

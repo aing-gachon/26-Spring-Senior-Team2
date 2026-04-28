@@ -1,7 +1,7 @@
 experiment_name: "BicDRL_ResNet50_Default"
 
 data:
-  csv_path: "data/Data_Entry_2017_v2020.csv"
+  csv_path: "data/Data_Entry_2017.csv"
   image_dir: "data/raw/"
   image_size: 224
 

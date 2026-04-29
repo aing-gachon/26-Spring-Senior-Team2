@@ -41,3 +41,7 @@ pr_description.md
 
 # Google Drive Sync temps
 .tmp.*
+
+# Scripts and log files
+*.log
+*.ps1

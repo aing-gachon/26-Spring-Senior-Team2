@@ -6,12 +6,12 @@ from monai.data import Dataset, DataLoader
 from .transforms import get_transforms
 
 def extract_label(finding):
-    # Nodule 이진 분류 ('No Finding' -> 0, 'Nodule' 단일 병변 -> 1, 그 외 복합/타질병 -> -1 무시)
-    if pd.isna(finding) or finding == 'No Finding':
+    # Nodule 이진 분류 ('Nodule' 포함 병변 -> 1, 그 외 모든 경우(정상 및 타질병) -> 0)
+    if pd.isna(finding):
         return 0
-    elif finding == 'Nodule':
+    elif 'Nodule' in str(finding):
         return 1
-    return -1
+    return 0
 
 def load_and_filter_data(csv_path, image_dir, epsilon=1e-5):
     """

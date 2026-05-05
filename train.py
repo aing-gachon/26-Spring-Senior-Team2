@@ -33,13 +33,13 @@ def train_agent():
     exp_name = config.get('experiment_name', 'BicDRL_Exp')
     save_dir = os.path.join(config['train']['save_dir'], f"{exp_name}_{current_time}")
     os.makedirs(save_dir, exist_ok=True)
-    print(f"📁 이번 학습의 파라미터는 덮어씌워지지 않고 [{save_dir}] 에 보존됩니다!")
+    print(f"Directory: Parameters will be saved in [{save_dir}]!")
     
     # 역대 최고 점수 기록용
     best_score = -float('inf')
     
     # 학습 루프 시작
-    print("🚀 본격적인 학습을 시작합니다 (Starting Training)...")
+    print("Starting Training...")
     from tqdm import tqdm
     for episode in range(num_episodes):
         state = env.reset()
@@ -72,10 +72,10 @@ def train_agent():
                 fn += 1
                 
             pbar.set_postfix({
-                "정답": true_label, 
-                "결정": action, 
-                "결과": f"TP:{tp} TN:{tn} FP:{fp} FN:{fn}",
-                "점수": f"{episode_reward:.1f}"
+                "Target": true_label, 
+                "Pred": action, 
+                "Result": f"TP:{tp} TN:{tn} FP:{fp} FN:{fn}",
+                "Score": f"{episode_reward:.1f}"
             })
             
             # Replay Buffer에 튜플 저장 (PER 기반으로 확장 여지)
@@ -130,19 +130,19 @@ def train_agent():
             best_score = episode_reward
             is_best = True
             torch.save(agent.main_net.state_dict(), os.path.join(save_dir, 'best_model.pth'))
-            pbar.write(f"✨ [Best Score!] 최고 기록 갱신 ({best_score:.2f}점) - best_model.pth 저장 완료")
+            pbar.write(f"[Best Score!] New record ({best_score:.2f}) - best_model.pth saved.")
             
         print(f"Episode {episode+1}/{num_episodes} | Score: {episode_reward:.1f} | Acc: {accuracy:.3f} | F1: {macro_f1:.3f} | G-Mean: {g_mean:.3f}")
         
         # 텍스트 로그 파일에 모델 평가지표 세부 누적 기록!
         log_file = os.path.join(save_dir, 'training_log.txt')
         with open(log_file, "a", encoding="utf-8") as f:
-            best_mark = "🔥 BEST" if is_best else ""
+            best_mark = "[BEST]" if is_best else ""
             f.write(f"Episode {episode+1:03d} | Score: {episode_reward:7.2f} | Loss: {avg_loss:.5f} | "
                     f"TP:{tp:3d} TN:{tn:3d} FP:{fp:3d} FN:{fn:3d} | "
                     f"Acc: {accuracy:.4f} | F1: {macro_f1:.4f} | G-Mean: {g_mean:.4f} {best_mark}\n")
         
-    print(f"🎉 Training Complete. All models saved securely in [{save_dir}]/")
+    print(f"Training Complete. All models saved in [{save_dir}]/")
 
 if __name__ == "__main__":
     train_agent()

@@ -21,46 +21,35 @@ def load_and_filter_data(csv_path, image_dir, epsilon=1e-5):
     class_counts = {0: 0, 1: 0} # Binary example
     
     if not os.path.exists(csv_path):
-        print(f"[Warning] CSV not found at {csv_path}. Using dummy dictionary for setup testing.")
-        # 더미 이미지 생성 (MONAI 로딩 테스트용)
-        if not os.path.exists("dummy.png"):
-            from PIL import Image
-            img = Image.new('L', (256, 256), color=128)
-            img.save("dummy.png")
-            
-        # Dummy data for pipeline validation
-        class_counts = {0: 100, 1: 10} # Imbalanced scenario
-        for i in range(110):
-            lbl = 0 if i < 100 else 1
-            data_dicts.append({"image": "dummy.png", "label": lbl})
-    else:
-        df = pd.read_csv(csv_path)
-        # Nodule이나 No Finding 단일 병변만 남기도록 필터링
-        df['label'] = df['Finding Labels'].apply(extract_label)
+        raise FileNotFoundError(f"CSV not found at {csv_path}")
         
-        # NIH 데이터셋은 images_001 ~ images_012 폴더에 나뉘어 저장되어 있을 수 있습니다.
-        # 모든 하위 폴더를 스캔하여 파일명 -> 전체 경로 맵을 생성합니다.
-        image_path_map = {}
-        for root, dirs, files in os.walk(image_dir):
-            for file in files:
-                if file.lower().endswith('.png'):
-                    image_path_map[file] = os.path.join(root, file)
+    df = pd.read_csv(csv_path)
+    # Nodule이나 No Finding 단일 병변만 남기도록 필터링
+    df['label'] = df['Finding Labels'].apply(extract_label)
+    
+    # NIH 데이터셋은 images_001 ~ images_012 폴더에 나뉘어 저장되어 있을 수 있습니다.
+    # 모든 하위 폴더를 스캔하여 파일명 -> 전체 경로 맵을 생성합니다.
+    image_path_map = {}
+    for root, dirs, files in os.walk(image_dir):
+        for file in files:
+            if file.lower().endswith('.png'):
+                image_path_map[file] = os.path.join(root, file)
 
-        for _, row in df.iterrows():
-            lbl = row['label']
-            if lbl == -1:
-                continue # 설정한 타겟 질환이 아닌 경우 스킵
-            
-            img_filename = row['Image Index']
-            
-            # 실제 파일이 존재하는지 맵에서 확인
-            if img_filename not in image_path_map:
-                continue
-            
-            img_path = image_path_map[img_filename]
-            
-            data_dicts.append({"image": img_path, "label": lbl})
-            class_counts[lbl] += 1
+    for _, row in df.iterrows():
+        lbl = row['label']
+        if lbl == -1:
+            continue # 설정한 타겟 질환이 아닌 경우 스킵
+        
+        img_filename = row['Image Index']
+        
+        # 실제 파일이 존재하는지 맵에서 확인
+        if img_filename not in image_path_map:
+            continue
+        
+        img_path = image_path_map[img_filename]
+        
+        data_dicts.append({"image": img_path, "label": lbl})
+        class_counts[lbl] += 1
             
     # Calculate adaptive weights (gamma_k = 1 / ln(c_k + epsilon))
     class_weights = {}

@@ -10,8 +10,8 @@ def evaluate():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     num_classes = config['agent']['num_classes']
     
-    # 1. 테스트 데이터 준비 (여기서는 시연 목적으로 동일 데이터 사용)
-    data_dicts, _ = load_and_filter_data(config['data']['csv_path'], config['data']['image_dir'])
+    # 1. 테스트 데이터 준비 (실제 테스트용 분리 데이터 사용)
+    data_dicts, _ = load_and_filter_data(config['data']['test_csv_path'], config['data']['image_dir'])
     test_loader = get_dataloader(data_dicts, batch_size=config['agent']['batch_size'], phase='test')
     
     # 2. 모델 로드
@@ -45,8 +45,6 @@ def evaluate():
             
             all_preds.extend(actions.cpu().numpy())
             all_targets.extend(labels.cpu().numpy())
-            
-            print(f"Batch {i+1} 평가 완료")
             
     # 평가 지표 (F1-score 등) 출력
     acc = accuracy_score(all_targets, all_preds)

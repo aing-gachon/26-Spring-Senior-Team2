@@ -13,7 +13,7 @@ def train_agent():
     config = get_config("configs/config.yaml")
     
     # 2. 데이터 준비 및 환경 구성
-    data_dicts, class_weights = load_and_filter_data(config['data']['csv_path'], config['data']['image_dir'])
+    data_dicts, class_weights = load_and_filter_data(config['data']['train_csv_path'], config['data']['image_dir'])
     train_loader = get_dataloader(data_dicts, batch_size=1) # 환경 조회를 위해 배치 1
     env = MedicalImageEnv(train_loader, class_weights)
     

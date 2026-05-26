@@ -11,7 +11,7 @@ class DDQNAgent:
         self.num_classes = num_classes
         
         # Phase 3: Agent Architecture parameters
-        self.gamma = config['agent'].get('gamma_rl', 0.99)
+        self.gamma = config['agent']['gamma_factor']
         self.epsilon = config['agent']['epsilon_start']
         self.epsilon_min = config['agent']['epsilon_end']
         self.epsilon_decay = config['agent']['epsilon_decay']

@@ -13,10 +13,9 @@ def extract_label(finding):
         return 1
     return 0
 
-def load_and_filter_data(csv_path, image_dir, epsilon=1e-5, balance=False):
+def load_and_filter_data(csv_path, image_dir, epsilon=1e-5):
     """
     데이터셋 필터링 밑 적응형 가중치(gamma_k) 사전 계산 (Phase 1)
-    balance=True일 경우 소수 클래스를 오버샘플링하여 5:5 비율을 맞춤
     """
     data_dicts = []
     class_counts = {0: 0, 1: 0} # Binary example
@@ -36,7 +35,6 @@ def load_and_filter_data(csv_path, image_dir, epsilon=1e-5, balance=False):
             if file.lower().endswith('.png'):
                 image_path_map[file] = os.path.join(root, file)
 
-    temp_data_dicts = {0: [], 1: []}
     for _, row in df.iterrows():
         lbl = row['label']
         if lbl == -1:
@@ -49,44 +47,20 @@ def load_and_filter_data(csv_path, image_dir, epsilon=1e-5, balance=False):
             continue
         
         img_path = image_path_map[img_filename]
-        temp_data_dicts[lbl].append({"image": img_path, "label": lbl})
+        
+        data_dicts.append({"image": img_path, "label": lbl})
         class_counts[lbl] += 1
-
-    if balance:
-        max_count = max(class_counts.values())
-        balanced_data_dicts = []
-        for lbl, samples in temp_data_dicts.items():
-            if len(samples) == 0:
-                continue
-            # 해당 클래스의 샘플 수가 부족하면 복사해서 채움 (Oversampling)
-            num_samples = len(samples)
-            if num_samples < max_count:
-                # 부족한 만큼 반복 복사
-                repeats = max_count // num_samples
-                remainder = max_count % num_samples
-                balanced_samples = samples * repeats + samples[:remainder]
-                balanced_data_dicts.extend(balanced_samples)
-                class_counts[lbl] = len(balanced_samples)
-            else:
-                balanced_data_dicts.extend(samples)
-        data_dicts = balanced_data_dicts
-    else:
-        for lbl in temp_data_dicts:
-            data_dicts.extend(temp_data_dicts[lbl])
             
-    # Calculate adaptive weights (Inverse Frequency based)
-    total = len(data_dicts)
+    # Calculate adaptive weights (gamma_k = 1 / ln(c_k + epsilon))
     class_weights = {}
     for cls_idx, count in class_counts.items():
         if count > 0:
-            # 단순 로그보다는 역빈도 방식이 불균형 해소에 더 강력함
-            class_weights[cls_idx] = total / (len(class_counts) * count)
+            class_weights[cls_idx] = 1.0 / math.log(count + epsilon)
         else:
             class_weights[cls_idx] = 1.0
             
     print(f"Data Loaded: {len(data_dicts)} files. Class counts: {class_counts}. Weights: {class_weights}")
     return data_dicts, class_weights
-
 
 def get_dataloader(data_dicts, batch_size=32, image_size=224, phase='train'):
     transforms = get_transforms(image_size, phase=phase)
